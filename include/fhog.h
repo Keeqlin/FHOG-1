@@ -1,7 +1,7 @@
 #ifndef SX_FHOG_FHOG_H
 #define SX_FHOG_FHOG_H
 
-#include <opencv2\core.hpp>
+#include <opencv2/core.hpp>
 
 #define FHOG_OK             0
 #define FHOG_ERR_FEATUREMAP 1
@@ -9,6 +9,8 @@
 #define FHOG_ERR_PCA        3
 
 #define NUM_SECTOR 9
+#define ORIGINAL_FEATURE_NUM 27
+#define NORMALIZED_FEATURE_NUM 108
 
 class FHOG{
 public:
@@ -33,9 +35,9 @@ public:
      ***********************************************************************/
     int static_Init(cv::Size _sz, int _cellSize);
 
-    int compute(const cv::Mat &src, cv::Mat &dst, int _cellSize, float thres);
+    int compute(const cv::Mat &src, cv::Mat &dst, int _cellSize, float thres = 0.2);
 
-private:
+// private:
     int getFeatureMaps(const cv::Mat &src);
     int normalizeAndTruncate(float thres);
     int PCAFeatureMaps();
@@ -44,13 +46,17 @@ private:
     int cellSize;
     cv::Size sz;
     int numFeatures;
-    cv::Mat map; // sz.y*sz.x X numFeatures 
-    cv::Mat originalFeature; // (sz.y+2)*(sz.x+2) X numFeatures X 1
-    cv::Mat normalizedFeature; // sz.y*sz.x X numFeatures X 1
+    size_t element_num;
+    // shape: (rows) X (cols) X (channels)
+    cv::Mat map;               // sz.y*sz.x X numFeatures X 1
+    cv::Mat originalFeature;   // sz.y*sz.x X NUM_SECTOR*3 X 1
+    cv::Mat normalizedFeature; // sz.y*sz.x X (NUM_SECTOR*3)*4 X 1
 
 // Used by getFeatureMaps()
-    cv::Mat alpha; // (sz.y+2)*cellSize X (sz.x+2)*cellSize X 2
-    cv::Mat r; // (sz.y+2)*cellSize X (sz.x+2)*cellSize X 1
+    // bin-index(insensitive/sensitive) of each pixel
+    cv::Mat alpha; // imageSize.height X imageSize.width X 2
+    // gradient value of each pixel
+    cv::Mat r;     // imageSize.height X imageSize.width X 1
     
     cv::Mat nearest; // CellSize
     cv::Mat w; // 2*CellSize
@@ -62,7 +68,7 @@ private:
     cv::Mat imagePadded; // (img.rows+2) x (img.cols+2)
 
 // Used by normalizeAndTruncate()
-    cv::Mat partOfNorm; // (sz.y+2)*(sz.x+2) (float)
+    cv::Mat partOfNorm; // sz.y X sz.x X 1
     
 // Used by PCAFeatureMaps()
 

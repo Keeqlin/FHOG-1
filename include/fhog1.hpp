@@ -55,9 +55,9 @@
 //#include "_lsvmc_error.h"
 //#include "_lsvmc_routine.h"
 
-//#include "opencv2/imgproc.hpp"
-#include "opencv2/opencv.hpp"
-#include "opencv/cv.h"
+#include <opencv2/imgproc.hpp>
+#include <opencv2/opencv.hpp>
+// #include <opencv/cv.h>
 
 
 //modified from "_lsvmc_types.h"
@@ -133,47 +133,47 @@ typedef struct{
 // RESULT
 // Error status
 */
-int getFeatureMaps(const IplImage * image, const int k, CvLSVMFeatureMapCaskade **map);
+// int getFeatureMaps(const IplImage * image, const int k, CvLSVMFeatureMapCaskade **map);
 
 
-/*
-// Feature map Normalization and Truncation 
-//
-// API
-// int normalizationAndTruncationFeatureMaps(featureMap *map, const float alfa);
-// INPUT
-// map               - feature map
-// alfa              - truncation threshold
-// OUTPUT
-// map               - truncated and normalized feature map
-// RESULT
-// Error status
-*/
-int normalizeAndTruncate(CvLSVMFeatureMapCaskade *map, const float alfa);
+// /*
+// // Feature map Normalization and Truncation 
+// //
+// // API
+// // int normalizationAndTruncationFeatureMaps(featureMap *map, const float alfa);
+// // INPUT
+// // map               - feature map
+// // alfa              - truncation threshold
+// // OUTPUT
+// // map               - truncated and normalized feature map
+// // RESULT
+// // Error status
+// */
+// int normalizeAndTruncate(CvLSVMFeatureMapCaskade *map, const float alfa);
 
-/*
-// Feature map reduction
-// In each cell we reduce dimension of the feature vector
-// according to original paper special procedure
-//
-// API
-// int PCAFeatureMaps(featureMap *map)
-// INPUT
-// map               - feature map
-// OUTPUT
-// map               - feature map
-// RESULT
-// Error status
-*/
-int PCAFeatureMaps(CvLSVMFeatureMapCaskade *map);
+// /*
+// // Feature map reduction
+// // In each cell we reduce dimension of the feature vector
+// // according to original paper special procedure
+// //
+// // API
+// // int PCAFeatureMaps(featureMap *map)
+// // INPUT
+// // map               - feature map
+// // OUTPUT
+// // map               - feature map
+// // RESULT
+// // Error status
+// */
+// int PCAFeatureMaps(CvLSVMFeatureMapCaskade *map);
 
 
-//modified from "lsvmc_routine.h"
+// //modified from "lsvmc_routine.h"
 
-int allocFeatureMapObject(CvLSVMFeatureMapCaskade **obj, const int sizeX, const int sizeY,
-                          const int p);
+// int allocFeatureMapObject(CvLSVMFeatureMapCaskade **obj, const int sizeX, const int sizeY,
+//                           const int p);
 
-int freeFeatureMapObject (CvLSVMFeatureMapCaskade **obj);
+// int freeFeatureMapObject (CvLSVMFeatureMapCaskade **obj);
 
 
 #endif
