@@ -1,4 +1,4 @@
-#include "fhog.h"
+#include "fhog.hpp"
 #include <assert.h>
 #include <float.h>
 #include <string.h>
@@ -20,11 +20,10 @@ static float boundary_y[] = {	 0.000000000, 0.342020154,  0.642787635,
 
 int FHOG::static_Init(cv::Size _sz, int _cellSize)
 {
-    // if(_sz == imageSize && cellSize == _cellSize)
-    // {
-    //     return FHOG_OK;
-    // }
-    
+    if (_sz == imageSize && cellSize == _cellSize)
+    {
+        return FHOG_OK;
+    }
     imageSize = _sz;
     cellSize = _cellSize;
 
@@ -36,20 +35,21 @@ int FHOG::static_Init(cv::Size _sz, int _cellSize)
     // insensitive (9) + conttast sensitive(9*2) +
     // 4 dimensions capturing the overall gradient energy in square blocks of four cells around (i,j)
     numFeatures = NUM_SECTOR * 3 + 4;
-    map.create(element_num, numFeatures, CV_32FC1);
-    map.setTo(0);
+	map = cv::Mat::zeros(element_num, numFeatures, CV_32FC1);
 
-    originalFeature.create(element_num, ORIGINAL_FEATURE_NUM, CV_32FC1); 
-    normalizedFeature.create(element_num, NORMALIZED_FEATURE_NUM, CV_32FC1);  
-    normalizedFeature.setTo(0);
+	originalFeature   = cv::Mat::zeros(element_num, ORIGINAL_FEATURE_NUM,   CV_32FC1);
+	normalizedFeature = cv::Mat::zeros(element_num, NORMALIZED_FEATURE_NUM, CV_32FC1);
 
     // record gradient information
-    alpha.create(imageSize.height, imageSize.width, CV_32SC2);
-    r.create(imageSize.height, imageSize.width, CV_32FC1);
+	alpha = cv::Mat::zeros(imageSize.height, imageSize.width, CV_32SC2);
+	r     = cv::Mat::zeros(imageSize.height, imageSize.width, CV_32FC1);
 
-    // TODO: what are the purposes of nearest and w
+    // auxiliary helper: precalculated terms of interploation
+    // index of near cell
     nearest.create(1, cellSize, CV_32SC1);
+    // voting/interpolation ratio 
     w.create(1, 2*cellSize, CV_32FC1);
+	
 
     for(int i = 0; i < cellSize / 2; ++i)
     {
@@ -60,25 +60,20 @@ int FHOG::static_Init(cv::Size _sz, int _cellSize)
         nearest.at<int>(0, i) = 1;
     }
 
+ 
     for(int j = 0; j < cellSize / 2; j++)
     {
-        float b_x = cellSize / 2 + j + 0.5f;
-        float a_x = cellSize / 2 - j - 0.5f;
-        w.at<float>(0, j * 2)= 1.0f/a_x * ((a_x * b_x) / ( a_x + b_x)); 
-        w.at<float>(0, j * 2 + 1) = 1.0f/b_x * ((a_x * b_x) / ( a_x + b_x));  
+        float temp = cellSize / 2 + j + 0.5f;
+        w.at<float>(0, j * 2)= 1.0f * temp / (float)cellSize; 
+        w.at<float>(0, j * 2 + 1) = 1 - w.at<float>(0, j * 2);  
     }
     for(int j = cellSize / 2; j < cellSize; j++)
     {
-        float a_x = j - cellSize / 2 + 0.5f;
-        float b_x =-j + cellSize / 2 - 0.5f + cellSize;
-        w.at<float>(0, j * 2) = 1.0f/a_x * ((a_x * b_x) / ( a_x + b_x)); 
-        w.at<float>(0, j * 2 + 1) = 1.0f/b_x * ((a_x * b_x) / ( a_x + b_x));  
+        float temp = cellSize - (j - cellSize / 2 + 0.5f);
+        w.at<float>(0, j * 2)= 1.0f * temp / (float)cellSize; 
+        w.at<float>(0, j * 2 + 1) = 1 - w.at<float>(0, j * 2);  
     }
-
-    dx_ori.create(imageSize.width + 2, imageSize.height + 2, CV_16SC1);
-    dy_ori.create(imageSize.width + 2, imageSize.height + 2, CV_16SC1);
-
-    partOfNorm.create((sz.height),(sz.width), CV_32FC1);
+    partOfNorm.create(sz.height, sz.width, CV_32FC1);
 
     return FHOG_OK;
 }
@@ -107,6 +102,7 @@ int FHOG::getFeatureMaps(const cv::Mat &src)
 {
     int height = src.rows;
     int width  = src.cols;
+	int numChannels = src.channels();
 
 	float kernel[3] = { -1.f, 0.f, 1.f };
 	cv::Mat kernel_dx(1, 3, CV_32F, kernel);
@@ -115,25 +111,38 @@ int FHOG::getFeatureMaps(const cv::Mat &src)
 	cv::Mat dx;
 	cv::Mat dy;
 
-	cv::filter2D(src, dx, CV_16S, kernel_dx, cv::Point(-1,-1), 0.0, cv::BORDER_REFLECT);
-	cv::filter2D(src, dy, CV_16S, kernel_dy, cv::Point(-1, -1), 0.0, cv::BORDER_REFLECT);
+	cv::filter2D(src, dx, CV_16S, kernel_dx, cv::Point(-1,0), 0.0, cv::BORDER_REFLECT);
+	cv::filter2D(src, dy, CV_16S, kernel_dy, cv::Point(0,-1), 0.0, cv::BORDER_REFLECT);
 
     for (int i = 1; i < height - 1; ++i)
     {
-        int16_t *pdx = dx.ptr<int16_t>(i);
-        int16_t *pdy = dy.ptr<int16_t>(i);
+        // int16_t *pdx = dx.ptr<int16_t>(i);
+        // int16_t *pdy = dy.ptr<int16_t>(i);
         float *pr = r.ptr<float>(i);
         cv::Vec2i *palpha = alpha.ptr<cv::Vec2i>(i);
+		size_t row_index = width * i;
         for (int j = 1; j < width - 1; ++j)
         {
-            float x = pdx[j];
-            float y = pdy[j];
-            // gradient magnitude of pixel(j,i)
-            pr[j] = sqrt(x * x + y * y);
-
-            float dp1 = abs(boundary_x[1] * x + boundary_y[1] * y);
-			float dp2 = abs(boundary_x[4] * x + boundary_y[4] * y);
-			float dp3 = abs(boundary_x[7] * x + boundary_y[7] * y);
+			size_t pixel_index_ = numChannels*(row_index + j);
+			// gradient magnitude of pixel(j,i)
+            int x = 0;
+            int y = 0;
+			pr[j] = 0;
+			for (int ch = 0; ch <numChannels; ch++) {
+				// frame.data[frame.channels()*(frame.cols*y + x) + 0];  channel 1
+				int16_t tx = ((int16_t*)dx.data)[pixel_index_ + ch];
+				int16_t ty = ((int16_t*)dy.data)[pixel_index_ + ch];
+				float mag = sqrt(tx * tx + ty * ty);
+				if ( mag > pr[j]) {
+					pr[j] = mag;
+					x = tx;
+					y = ty;
+				}
+			}
+        
+            float dp1 = fabs(boundary_x[1] * x + boundary_y[1] * y);
+			float dp2 = fabs(boundary_x[4] * x + boundary_y[4] * y);
+			float dp3 = fabs(boundary_x[7] * x + boundary_y[7] * y);
 
             int maxi = (dp1 > dp2 && dp1 > dp3) ? 1 : dp2 > dp3 ? 4 : 7;
             int maxii = maxi - 1;
@@ -163,16 +172,18 @@ int FHOG::getFeatureMaps(const cv::Mat &src)
 
 
     // Bilinear interpolation
-    int sizeX = sz.width;
-    int sizeY = sz.height;
+    int sizeX      = sz.width;
+    int sizeY      = sz.height;
     int stringSize = 3 * sizeX * NUM_SECTOR;
 
-    float* pw = w.ptr<float>();
-    int* pn = nearest.ptr<int>();
-    float* pm = originalFeature.ptr<float>();
-	originalFeature.setTo(0);
-    float* pr = r.ptr<float>();
+    originalFeature.setTo(0);
+    // auxiliary helper
+    float *pw   = w.ptr<float>();
+    int *pn     = nearest.ptr<int>();
+    float *pm   = originalFeature.ptr<float>();
+    float *pr   = r.ptr<float>();
     int *palpha = alpha.ptr<int>();
+
 
     for(int i = 0; i < sizeY; ++i)
 	{
@@ -182,27 +193,34 @@ int FHOG::getFeatureMaps(const cv::Mat &src)
 			{
 				for(int jj = 0; jj < cellSize; ++jj)
 				{
+                    // shifted cell index of originalFeature
 					int i_nii = i + pn[ii];
 					int j_njj = j + pn[jj];
 					int i_niixss = i_nii * stringSize;
 					int j_njjxmn = j_njj * 3 * NUM_SECTOR;
+                    
+                    // current cell index of originalFeature
 					int ixss = i * stringSize;
 					int jxmn = j * 3 * NUM_SECTOR;
-					int iix2 = ii * 2;
+                    
+                    int iix2 = ii * 2;
 					int jjx2_0 = jj * 2;
 					int jjx2_1 = jjx2_0 + 1;
-					int ixk_ii = i * cellSize + ii;
+					
+                    // pixel index
+                    int ixk_ii = i * cellSize + ii;
 					int jxk_jj = j * cellSize + jj;
-
-
 					if ((ixk_ii > 0) && (ixk_ii < height - 1) && (jxk_jj > 0) && (jxk_jj < width  - 1))
 					{
 						int d = (ixk_ii) * width + (jxk_jj);
 						int dx2 = d * 2;
-						float rdxwii2_1 = pr[d] * pw[iix2 + 1];
+                        // bin-index of orientation
+                        int alfa_dx2_0   = palpha[dx2];                  // insenstive(9): 0 - 8
+						int alfa_dx2_1_N = palpha[dx2 + 1] + NUM_SECTOR; // sensitive(18): 9 - 26 
+                        
+                        // pr[d] is gradient magnitude
+                        float rdxwii2_1 = pr[d] * pw[iix2 + 1];
 						float rdxwii2_0 = pr[d] * pw[iix2];
-						int alfa_dx2_0   = palpha[dx2];
-						int alfa_dx2_1_N = palpha[dx2 + 1] + NUM_SECTOR;
 
 						float rw00 = rdxwii2_0 * pw[jjx2_0];
 						float rw11 = rdxwii2_1 * pw[jjx2_1];
@@ -211,10 +229,12 @@ int FHOG::getFeatureMaps(const cv::Mat &src)
 
 						pm[ ixss + jxmn + alfa_dx2_0  ] += rw00;
 						pm[ ixss + jxmn + alfa_dx2_1_N] += rw00;
+
 						if ((i_nii >= 0) && (i_nii <= sizeY - 1) && (j_njj >= 0) && (j_njj <= sizeX - 1))
 						{
 							pm[i_niixss + j_njjxmn + alfa_dx2_0  ] += rw11;
 							pm[i_niixss + j_njjxmn + alfa_dx2_1_N] += rw11;
+
 							pm[i_niixss + jxmn 	   + alfa_dx2_0  ] += rw10;
 							pm[i_niixss + jxmn 	   + alfa_dx2_1_N] += rw10;
 							pm[ixss     + j_njjxmn + alfa_dx2_0  ] += rw01;
@@ -243,6 +263,7 @@ int FHOG::normalizeAndTruncate(float thres)
 {
 
     float* pPartOfNorm = partOfNorm.ptr<float>();
+    // originalFeature.rows = sz.width * sz.height
     for(int i = 0; i < originalFeature.rows; ++i)
     {
         float valOfNorm = 0.0f;
@@ -251,7 +272,7 @@ int FHOG::normalizeAndTruncate(float thres)
         for(int j = 0; j < NUM_SECTOR; j++)
         {
         	float mm_p_j = pm[j];
-            valOfNorm += mm_p_j * mm_p_j;
+            valOfNorm += (mm_p_j * mm_p_j);
         }
         pPartOfNorm[i] = valOfNorm;
     }
@@ -262,6 +283,7 @@ int FHOG::normalizeAndTruncate(float thres)
         float* pPartOfNorm_curr = partOfNorm.ptr<float>(i);
         float* pPartOfNorm_last = partOfNorm.ptr<float>(i-1);
         float* pPartOfNorm_next = partOfNorm.ptr<float>(i+1);
+
         size_t index = i * (sz.width);
         for(int j = 1; j < sz.width-1; ++j)
         {
@@ -279,7 +301,7 @@ int FHOG::normalizeAndTruncate(float thres)
             float valOfNorm3 = 1.f / sqrt(pN_0 + pN_6 + pN_2 + pN_7 + FLT_EPSILON);
             float valOfNorm4 = 1.f / sqrt(pN_0 + pN_6 + pN_4 + pN_8 + FLT_EPSILON);
 
-            float* pOriginalFeature = originalFeature.ptr<float>(index + j);
+            float* pOriginalFeature   = originalFeature.ptr<float>(index + j);
             float* pNormalizedFeature = normalizedFeature.ptr<float>(index + j);
             for(int ii = 0; ii < NUM_SECTOR; ii++)
             {
@@ -288,6 +310,7 @@ int FHOG::normalizeAndTruncate(float thres)
                 pNormalizedFeature[ii + NUM_SECTOR] = mm_idx1 * valOfNorm2;
                 pNormalizedFeature[ii + NUM_SECTOR * 2] = mm_idx1 * valOfNorm3;
                 pNormalizedFeature[ii + NUM_SECTOR * 3] = mm_idx1 * valOfNorm4;
+
             }
             pOriginalFeature = pOriginalFeature + NUM_SECTOR;
             for(int ii = 0; ii < 2 * NUM_SECTOR; ii++)
@@ -317,7 +340,9 @@ int FHOG::normalizeAndTruncate(float thres)
 int FHOG::PCAFeatureMaps()
 {
     float nx    = 1.f / sqrt((float)(NUM_SECTOR * 2)+FLT_EPSILON);
-    float ny    = 1.f / sqrt((float)(4)+FLT_EPSILON);
+    float ny    = 0.5f; 
+    // float ny    = 1.f / sqrt((float)(4)+FLT_EPSILON);
+
 
     for(int i = 0; i < sz.height; i++)
     {
@@ -334,13 +359,13 @@ int FHOG::PCAFeatureMaps()
                 for(int n = 0; n < 4; ++n)
                 {
                     pMap[m] += *phead;
-                    phead += 2 * NUM_SECTOR;
+                    phead   += 2 * NUM_SECTOR;
                 }
                 pMap[m] *= ny;
             }
 
-            pMap += 2 * NUM_SECTOR;
             // contrast insensitive orientation
+            pMap += 2 * NUM_SECTOR;
             for(int m = 0; m < NUM_SECTOR; ++m)
             {
                 float* phead = pNormalizeFeature + m;
@@ -352,11 +377,16 @@ int FHOG::PCAFeatureMaps()
                 pMap[m] *= ny;
             }
 
-            pMap += NUM_SECTOR;
             // 4 dimensions capturing the overall gradient energy
+            pMap += NUM_SECTOR;
             for(int m = 0; m < 4; ++m)
             {
-                float* phead = pNormalizeFeature + (2*m+4)*NUM_SECTOR;
+                float* phead = pNormalizeFeature + m*NUM_SECTOR;
+                for(int n = 0; n < NUM_SECTOR; ++n)
+                {
+                    pMap[m] += *(phead++);
+                }
+                phead = pNormalizeFeature + (2*m+4)*NUM_SECTOR;
                 for(int n = 0; n < 2 * NUM_SECTOR; ++n)
                 {
                     pMap[m] += *(phead++);

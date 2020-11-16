@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.0)
 set(PROJECT_NAME FHOG_Demo)
 project(${PROJECT_NAME})
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -DNDEBUG -O3")
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/build)
 
 include_directories(${CMAKE_CURRENT_LIST_DIR}/include)

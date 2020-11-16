@@ -2,10 +2,11 @@
 #include <vector>
 #include <string>
 
-#include "fhog.h"
+#include "fhog.hpp"
 #include "fhog1.hpp"
 #include <opencv2/opencv.hpp>
 
+#define ITERATION 100
 
 int main(int argc, char** argv)
 {
@@ -22,7 +23,7 @@ int main(int argc, char** argv)
 	auto st_new_fhog = cv::getTickCount();
 
 	FHOG fhogDescripter;
-	for (int i = 0; i < 1; ++i)
+	for (int i = 0; i < ITERATION; ++i)
 	{
 		fhogDescripter.static_Init(resize_img.size(), 2);
 		cv::Mat feat;
@@ -31,6 +32,7 @@ int main(int argc, char** argv)
     
 	auto ed_new_fhog = cv::getTickCount();
 	double time_new_fhog = (ed_new_fhog - st_new_fhog) / cv::getTickFrequency();
+	time_new_fhog /= ITERATION;
 
 
 	// IplImage img_0 = img;
@@ -51,7 +53,7 @@ int main(int argc, char** argv)
 
 
 	// cout << "Original FHOG:" << time_old_fhog << endl;
-	std::cout << "New FHOG: " << time_new_fhog*1000 <<"ms"<< std::endl;
+	std::cout << "New FHOG: " << time_new_fhog*1000 <<" ms"<< std::endl;
 	std::cout << "fhogDescripter.imageSize :" << fhogDescripter.imageSize << std::endl;
 	std::cout << "fhogDescripter.sz :" << fhogDescripter.sz << std::endl;
 	std::cout << "fhogDescripter.map.size() :" << fhogDescripter.map.size() << std::endl;

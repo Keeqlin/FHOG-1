@@ -63,15 +63,11 @@ public:
 
     cv::Mat dx; // img.rows x img.cols
     cv::Mat dy; // img.rows x img.cols
-    cv::Mat dx_ori; // (img.rows+2) x (img.cols+2)
-    cv::Mat dy_ori; // (img.rows+2) x (img.cols+2)
     cv::Mat imagePadded; // (img.rows+2) x (img.cols+2)
 
 // Used by normalizeAndTruncate()
     cv::Mat partOfNorm; // sz.y X sz.x X 1
     
-// Used by PCAFeatureMaps()
-
 };
 
 #endif
